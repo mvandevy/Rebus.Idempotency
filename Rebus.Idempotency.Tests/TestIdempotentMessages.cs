@@ -1,33 +1,31 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using NUnit.Framework;
 using Rebus.Activation;
 using Rebus.Bus;
-using Rebus.Tests.Contracts;
 using Rebus.Config;
 using Rebus.Handlers;
 using Rebus.Idempotency.Persistence;
 using Rebus.Logging;
 using Rebus.Messages;
-using Rebus.Tests.Contracts.Extensions;
 using Rebus.Transport;
 using Rebus.Transport.InMem;
+using Xunit;
 
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
 namespace Rebus.Idempotency.Tests
 {
-    [TestFixture]
-    public class TestIdempotentMessages : FixtureBase
+    public class TestIdempotentMessages : UnitTestBase
     {
         const int MakeEveryFifthMessageFail = 5;
         BuiltinHandlerActivator _activator;
         IBus _bus;
         ConcurrentDictionary<string, MessageData> _persistentMessageData;
 
-        protected override void SetUp()
+        public TestIdempotentMessages()
         {
             _activator = Using(new BuiltinHandlerActivator());
 
@@ -50,7 +48,7 @@ namespace Rebus.Idempotency.Tests
                 .Start();
         }
 
-        [Test]
+        [Fact]
         public async Task HandlerIsTriggered()
         {
             var handlersTriggered = new ConcurrentQueue<DateTime>();
@@ -60,10 +58,10 @@ namespace Rebus.Idempotency.Tests
 
             await Task.Delay(1000);
 
-            Assert.That(handlersTriggered.Count, Is.EqualTo(1));
+            Assert.Equal(1, handlersTriggered.Count);
         }
 
-        [Test]
+        [Fact]
         public async Task ResendOfOriginalMessageDoesntResultInReprocessing()
         {
             var handlersTriggered = new ConcurrentQueue<DateTime>();
@@ -82,15 +80,16 @@ namespace Rebus.Idempotency.Tests
 
             await Task.Delay(1000);
 
-            Assert.That(handlersTriggered.Count, Is.EqualTo(1));
+            Assert.Equal(1, handlersTriggered.Count);
         }
 
-        [TestCase(10)]
+        [Theory]
+        [InlineData(10)]
         public async Task SlowReceiveOfDuplicateMessagesTriggersAllOutgoingMessages(int total)
         {
             if (total < MakeEveryFifthMessageFail)
             {
-                Assert.Fail("Fail factor must be less than or equal to total!");
+                Assert.True(false, "Fail factor must be less than or equal to total!");
             }
 
             var handlersTriggered = new ConcurrentQueue<DateTime>();
@@ -120,16 +119,17 @@ namespace Rebus.Idempotency.Tests
 
             await Task.Delay(2000);
 
-            Assert.That(handlersTriggered.Count, Is.EqualTo(1), "The handler should only have been triggered once.");
-            Assert.That(receivedMessages.Count, Is.EqualTo(total), "Not all outgoing messages where received.");
+            Assert.Equal(1, handlersTriggered.Count);
+            Assert.Equal(10, receivedMessages.Count);
         }
 
-        [TestCase(10)]
+        [Theory]
+        [InlineData(10)]
         public async Task OutgoingMessagesAreAllRetriggered(int total)
         {
             if (total < MakeEveryFifthMessageFail)
             {
-                Assert.Fail("Fail factor must be less than or equal to total!");
+                Assert.True(false, "Fail factor must be less than or equal to total!");
             }
 
             var handlersTriggered = new ConcurrentQueue<DateTime>();
@@ -155,8 +155,8 @@ namespace Rebus.Idempotency.Tests
 
             await Task.Delay(2000);
 
-            Assert.That(handlersTriggered.Count, Is.EqualTo(1), "The handler should only have been triggered once.");
-            Assert.That(receivedMessages.Count, Is.EqualTo(total), "Not all outgoing messages where received.");
+            Assert.Equal(1, handlersTriggered.Count);
+            Assert.Equal(10, receivedMessages.Count);
         }
 
         private Dictionary<string, string> ConstructHeadersWithMessageId()
