@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 using Rebus.Messages;
 using Rebus.Pipeline.Send;
 
@@ -16,21 +17,6 @@ namespace Rebus.Idempotency
         public MessageData()
         {
             IdempotencyData = new IdempotencyData();
-        }
-
-        public override int GetHashCode()
-        {
-            unchecked // Overflow is fine, just wrap
-            {
-                int hash = (int)2166136261;
-                // Suitable nullity checks etc, of course :)
-                hash = (hash * 16777619) ^ MessageId.GetHashCode();
-                hash = (hash * 16777619) ^ IdempotencyData.GetHashCode();
-                hash = (hash * 16777619) ^ InputQueueAddress.GetHashCode();
-                hash = (hash * 16777619) ^ ProcessingThreadId.GetValueOrDefault().GetHashCode();
-                hash = (hash * 16777619) ^ TimeThreadIdAssigned.GetHashCode();
-                return hash;
-            }
         }
 
         public bool HasAlreadyHandled(string messageId)

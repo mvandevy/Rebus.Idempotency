@@ -42,36 +42,21 @@ namespace ConsoleApp1
             var handlersTriggered = new ConcurrentQueue<DateTime>();
             var receivedMessages = new ConcurrentQueue<OutgoingMessage>();
 
-            _activator.Register((b, context) => new MyIdempotentHandler(b, handlersTriggered));
+            _activator.Register((b, context) => new MyMessageHandler(b, handlersTriggered));
             _activator.Register(() => new OutgoingMessageCollector(receivedMessages));
 
             int total = 10;
-            var msg = new MyMessage
+            var messagesToSend = new List<MyMessage>(total);
+            for (int index = 0; index < total; index++)
+            {
+                var msg = new MyMessage
                 {
                     Id = 1,
                     Total = total,
                     SendOutgoingMessage = true
                 };
-
-//            var messagesToSend = new []
-//            {
-//                msg,
-//                msg,
-//                msg,
-//                msg,
-//                msg,
-//                msg,
-//                msg,
-//                msg,
-//                msg,
-//                msg
-//            };
-
-            var messagesToSend = new[]
-            {
-                msg,
-                msg
-            };
+                messagesToSend.Add(msg);   
+            }
 
             var headers = ConstructHeadersWithMessageId();
 
@@ -111,12 +96,12 @@ namespace ConsoleApp1
         }
     }
 
-    class MyIdempotentHandler : IHandleMessages<MyMessage>
+    class MyMessageHandler : IHandleMessages<MyMessage>
     {
         private readonly IBus _bus;
         private readonly ConcurrentQueue<DateTime> _sentMessages;
 
-        public MyIdempotentHandler(IBus bus, ConcurrentQueue<DateTime> messages)
+        public MyMessageHandler(IBus bus, ConcurrentQueue<DateTime> messages)
         {
             _bus = bus;
             _sentMessages = messages;
@@ -154,7 +139,7 @@ namespace ConsoleApp1
 
         public async Task Handle(OutgoingMessage message)
         {
-            Console.WriteLine($"Handled outgoing message with id {message.Id}");
+            Console.WriteLine($"OUTGOING: Handled outgoing message with id {message.Id}");
             _receivedMessages.Enqueue(message);
         }
     }

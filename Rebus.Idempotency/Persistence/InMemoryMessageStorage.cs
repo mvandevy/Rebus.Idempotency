@@ -28,7 +28,6 @@ namespace Rebus.Idempotency.Persistence
                 {
                     result = new MessageData() {MessageId = messageId};
                 }
-
                 return Clone(result);
             }
         }
