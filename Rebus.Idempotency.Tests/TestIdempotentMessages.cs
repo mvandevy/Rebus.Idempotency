@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Rebus.Activation;
 using Rebus.Bus;
 using Rebus.Config;
+using Rebus.Extensions;
 using Rebus.Handlers;
 using Rebus.Idempotency.Persistence;
 using Rebus.Logging;
@@ -23,7 +24,8 @@ namespace Rebus.Idempotency.Tests
         const int MakeEveryFifthMessageFail = 5;
         BuiltinHandlerActivator _activator;
         IBus _bus;
-        ConcurrentDictionary<string, MessageData> _persistentMessageData;
+        private ConcurrentDictionary<string, int> _transportMessagesSent = new ConcurrentDictionary<string, int>();
+        private ConcurrentDictionary<string, int> _transportMessagesReceived = new ConcurrentDictionary<string, int>();
 
         public TestIdempotentMessages()
         {
@@ -37,7 +39,8 @@ namespace Rebus.Idempotency.Tests
                     t.Decorate(c =>
                     {
                         var transport = c.Get<ITransport>();
-                        return new IntroducerOfTransportInstability(transport, MakeEveryFifthMessageFail);
+                        //transport = new IntroducerOfTransportInstability(transport, MakeEveryFifthMessageFail);
+                        return new TransportCounter(transport, _transportMessagesSent, _transportMessagesReceived);
                     });
                 })
                 .Options(o =>
@@ -81,6 +84,7 @@ namespace Rebus.Idempotency.Tests
             await Task.Delay(1000);
 
             Assert.Equal(1, handlersTriggered.Count);
+            Assert.Equal(2, _transportMessagesReceived[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
         }
 
         [Theory]
@@ -92,11 +96,11 @@ namespace Rebus.Idempotency.Tests
                 Assert.True(false, "Fail factor must be less than or equal to total!");
             }
 
-            var handlersTriggered = new ConcurrentQueue<DateTime>();
-            var receivedMessages = new ConcurrentQueue<OutgoingMessage>();
+            var myMessageHandlersTriggered = new ConcurrentQueue<DateTime>();
+            var outgoingMessageHandlersTriggered = new ConcurrentQueue<OutgoingMessage>();
 
-            _activator.Register((b, context) => new MyIdempotentHandler(b, handlersTriggered));
-            _activator.Register(() => new OutgoingMessageCollector(receivedMessages));
+            _activator.Register((b, context) => new MyIdempotentHandler(b, myMessageHandlersTriggered));
+            _activator.Register(() => new OutgoingMessageCollector(outgoingMessageHandlersTriggered));
 
             var messagesToSend = Enumerable
                 .Range(0, total)
@@ -119,8 +123,12 @@ namespace Rebus.Idempotency.Tests
 
             await Task.Delay(2000);
 
-            Assert.Equal(1, handlersTriggered.Count);
-            Assert.Equal(10, receivedMessages.Count);
+            Assert.Equal(1, myMessageHandlersTriggered.Count);
+            Assert.Equal(total, _transportMessagesReceived[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(total, _transportMessagesReceived[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(total, _transportMessagesSent[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(total, _transportMessagesSent[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(1, outgoingMessageHandlersTriggered.Count);
         }
 
         [Theory]
@@ -132,11 +140,11 @@ namespace Rebus.Idempotency.Tests
                 Assert.True(false, "Fail factor must be less than or equal to total!");
             }
 
-            var handlersTriggered = new ConcurrentQueue<DateTime>();
-            var receivedMessages = new ConcurrentQueue<OutgoingMessage>();
+            var myMessageHandlersTriggered = new ConcurrentQueue<DateTime>();
+            var outgoingMessageHandlersTriggered = new ConcurrentQueue<OutgoingMessage>();
 
-            _activator.Register((b, context) => new MyIdempotentHandler(b, handlersTriggered));
-            _activator.Register(() => new OutgoingMessageCollector(receivedMessages));
+            _activator.Register((b, context) => new MyIdempotentHandler(b, myMessageHandlersTriggered));
+            _activator.Register(() => new OutgoingMessageCollector(outgoingMessageHandlersTriggered));
 
             var messagesToSend = Enumerable
                 .Range(0, total)
@@ -155,8 +163,12 @@ namespace Rebus.Idempotency.Tests
 
             await Task.Delay(2000);
 
-            Assert.Equal(1, handlersTriggered.Count);
-            Assert.Equal(10, receivedMessages.Count);
+            Assert.Equal(1, myMessageHandlersTriggered.Count);
+            Assert.Equal(total, _transportMessagesReceived[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(total, _transportMessagesReceived[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(total, _transportMessagesSent[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(total, _transportMessagesSent[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(1, outgoingMessageHandlersTriggered.Count);
         }
 
         private Dictionary<string, string> ConstructHeadersWithMessageId()
@@ -204,6 +216,64 @@ namespace Rebus.Idempotency.Tests
                 }
 
                 return transportMessage;
+            }
+
+            public string Address
+            {
+                get { return _innerTransport.Address; }
+            }
+        }
+
+        class TransportCounter : ITransport
+        {
+            private readonly ITransport _innerTransport;
+            private readonly ConcurrentDictionary<string, int> _transportMessagesSent;
+            private readonly ConcurrentDictionary<string, int> _transportMessagesReceived;
+
+            public TransportCounter(ITransport transport, ConcurrentDictionary<string, int> transportMessagesSent,
+                ConcurrentDictionary<string, int> transportMessagesReceived)
+            {
+                _innerTransport = transport;
+                _transportMessagesSent = transportMessagesSent;
+                _transportMessagesReceived = transportMessagesReceived;
+            }
+
+
+            public void CreateQueue(string address)
+            {
+                _innerTransport.CreateQueue(address);
+            }
+
+            public async Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
+            {
+                var type = message.Headers[Headers.Type];
+                if (_transportMessagesSent.TryGetValue(type, out int value))
+                {
+                    _transportMessagesSent[type] = value + 1;
+                }
+                else
+                {
+                    _transportMessagesSent.GetOrAdd(type, 1);
+                }
+
+                await _innerTransport.Send(destinationAddress, message, context);
+            }
+
+            public async Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
+            {
+                var message = await _innerTransport.Receive(context, cancellationToken);
+                if (message == null) return null;
+
+                var type = message.Headers[Headers.Type];
+                if (_transportMessagesReceived.TryGetValue(type, out int value))
+                {
+                    _transportMessagesReceived[type] = value + 1;
+                }
+                else
+                {
+                    _transportMessagesReceived.GetOrAdd(type, 1);
+                }
+                return message;
             }
 
             public string Address

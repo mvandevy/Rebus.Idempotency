@@ -105,6 +105,8 @@ namespace Rebus.Idempotency
                     _log.Info($"Marking the message with ID {messageId} as been handled.");
                     messageData.MarkMessageAsHandled();
                 }
+
+
             }
             else
             {
