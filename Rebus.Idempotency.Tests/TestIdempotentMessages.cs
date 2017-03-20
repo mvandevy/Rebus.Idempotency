@@ -22,10 +22,10 @@ namespace Rebus.Idempotency.Tests
     public class TestIdempotentMessages : UnitTestBase
     {
         const int MakeEveryFifthMessageFail = 5;
-        BuiltinHandlerActivator _activator;
-        IBus _bus;
-        private ConcurrentDictionary<string, int> _transportMessagesSent = new ConcurrentDictionary<string, int>();
-        private ConcurrentDictionary<string, int> _transportMessagesReceived = new ConcurrentDictionary<string, int>();
+        private readonly BuiltinHandlerActivator _activator;
+        private readonly IBus _bus;
+        private readonly ConcurrentDictionary<string, int> _transportMessagesSent = new ConcurrentDictionary<string, int>();
+        private readonly ConcurrentDictionary<string, int> _transportMessagesReceived = new ConcurrentDictionary<string, int>();
 
         public TestIdempotentMessages()
         {
@@ -52,10 +52,10 @@ namespace Rebus.Idempotency.Tests
         }
 
         [Fact]
-        public async Task HandlerIsTriggered()
+        public async Task MyMessageHandlerIsTriggered()
         {
             var handlersTriggered = new ConcurrentQueue<DateTime>();
-            _activator.Register((b, context) => new MyIdempotentHandler(b, handlersTriggered));
+            _activator.Register((b, context) => new MyMessageHandler(b, handlersTriggered));
 
             await _bus.SendLocal(new MyMessage());
 
@@ -68,7 +68,7 @@ namespace Rebus.Idempotency.Tests
         public async Task ResendOfOriginalMessageDoesntResultInReprocessing()
         {
             var handlersTriggered = new ConcurrentQueue<DateTime>();
-            _activator.Register((b, context) => new MyIdempotentHandler(b, handlersTriggered));
+            _activator.Register((b, context) => new MyMessageHandler(b, handlersTriggered));
 
             var msgToSend = new MyMessage
             {
@@ -77,7 +77,7 @@ namespace Rebus.Idempotency.Tests
                 SendOutgoingMessage = true
             };
 
-            var headers = ConstructHeadersWithMessageId();
+            var headers = HeaderHelper.ConstructHeadersWithMessageId();
             await _bus.SendLocal(msgToSend, headers);
             await _bus.SendLocal(msgToSend, headers);
 
@@ -99,7 +99,7 @@ namespace Rebus.Idempotency.Tests
             var myMessageHandlersTriggered = new ConcurrentQueue<DateTime>();
             var outgoingMessageHandlersTriggered = new ConcurrentQueue<OutgoingMessage>();
 
-            _activator.Register((b, context) => new MyIdempotentHandler(b, myMessageHandlersTriggered));
+            _activator.Register((b, context) => new MyMessageHandler(b, myMessageHandlersTriggered));
             _activator.Register(() => new OutgoingMessageCollector(outgoingMessageHandlersTriggered));
 
             var messagesToSend = Enumerable
@@ -111,7 +111,7 @@ namespace Rebus.Idempotency.Tests
                     SendOutgoingMessage = true
                 })
                 .ToList();
-            var headers = ConstructHeadersWithMessageId();
+            var headers = HeaderHelper.ConstructHeadersWithMessageId();
 
             messagesToSend.ForEach(async message =>
             {
@@ -143,7 +143,7 @@ namespace Rebus.Idempotency.Tests
             var myMessageHandlersTriggered = new ConcurrentQueue<DateTime>();
             var outgoingMessageHandlersTriggered = new ConcurrentQueue<OutgoingMessage>();
 
-            _activator.Register((b, context) => new MyIdempotentHandler(b, myMessageHandlersTriggered));
+            _activator.Register((b, context) => new MyMessageHandler(b, myMessageHandlersTriggered));
             _activator.Register(() => new OutgoingMessageCollector(outgoingMessageHandlersTriggered));
 
             var messagesToSend = Enumerable
@@ -155,7 +155,7 @@ namespace Rebus.Idempotency.Tests
                     SendOutgoingMessage = true
                 })
                 .ToList();
-            var headers = ConstructHeadersWithMessageId();
+            var headers = HeaderHelper.ConstructHeadersWithMessageId();
 
             await Task.WhenAll(messagesToSend.Select(message => _bus.SendLocal(message, headers)));
 
@@ -171,116 +171,53 @@ namespace Rebus.Idempotency.Tests
             Assert.Equal(1, outgoingMessageHandlersTriggered.Count);
         }
 
-        private Dictionary<string, string> ConstructHeadersWithMessageId()
-        {
-            var headers = new Dictionary<string, string>();
-            headers.Add(Headers.MessageId, Guid.NewGuid().ToString());
-            return headers;
-        }
+        
 
-        class IntroducerOfTransportInstability : ITransport
-        {
-            readonly ITransport _innerTransport;
-            readonly int _failFactor;
-            int _failCounter;
-
-            public IntroducerOfTransportInstability(ITransport innerTransport, int failFactor)
-            {
-                _innerTransport = innerTransport;
-                _failFactor = failFactor;
-            }
-
-            public void CreateQueue(string address)
-            {
-                _innerTransport.CreateQueue(address);
-            }
-
-            public async Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
-            {
-                await _innerTransport.Send(destinationAddress, message, context);
-            }
-
-            public async Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
-            {
-                var transportMessage = await _innerTransport.Receive(context, cancellationToken);
-                if (transportMessage == null) return null;
-
-                var shouldFailThisTime = Interlocked.Increment(ref _failCounter) % _failFactor == 0;
-
-                if (shouldFailThisTime)
-                {
-                    context.OnCommitted(async () =>
-                    {
-                        throw new Exception("oh noes!!!!!");
-                    });
-                }
-
-                return transportMessage;
-            }
-
-            public string Address
-            {
-                get { return _innerTransport.Address; }
-            }
-        }
-
-        class TransportCounter : ITransport
-        {
-            private readonly ITransport _innerTransport;
-            private readonly ConcurrentDictionary<string, int> _transportMessagesSent;
-            private readonly ConcurrentDictionary<string, int> _transportMessagesReceived;
-
-            public TransportCounter(ITransport transport, ConcurrentDictionary<string, int> transportMessagesSent,
-                ConcurrentDictionary<string, int> transportMessagesReceived)
-            {
-                _innerTransport = transport;
-                _transportMessagesSent = transportMessagesSent;
-                _transportMessagesReceived = transportMessagesReceived;
-            }
-
-
-            public void CreateQueue(string address)
-            {
-                _innerTransport.CreateQueue(address);
-            }
-
-            public async Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
-            {
-                var type = message.Headers[Headers.Type];
-                if (_transportMessagesSent.TryGetValue(type, out int value))
-                {
-                    _transportMessagesSent[type] = value + 1;
-                }
-                else
-                {
-                    _transportMessagesSent.GetOrAdd(type, 1);
-                }
-
-                await _innerTransport.Send(destinationAddress, message, context);
-            }
-
-            public async Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
-            {
-                var message = await _innerTransport.Receive(context, cancellationToken);
-                if (message == null) return null;
-
-                var type = message.Headers[Headers.Type];
-                if (_transportMessagesReceived.TryGetValue(type, out int value))
-                {
-                    _transportMessagesReceived[type] = value + 1;
-                }
-                else
-                {
-                    _transportMessagesReceived.GetOrAdd(type, 1);
-                }
-                return message;
-            }
-
-            public string Address
-            {
-                get { return _innerTransport.Address; }
-            }
-        }
+//        class IntroducerOfTransportInstability : ITransport
+//        {
+//            readonly ITransport _innerTransport;
+//            readonly int _failFactor;
+//            int _failCounter;
+//
+//            public IntroducerOfTransportInstability(ITransport innerTransport, int failFactor)
+//            {
+//                _innerTransport = innerTransport;
+//                _failFactor = failFactor;
+//            }
+//
+//            public void CreateQueue(string address)
+//            {
+//                _innerTransport.CreateQueue(address);
+//            }
+//
+//            public async Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
+//            {
+//                await _innerTransport.Send(destinationAddress, message, context);
+//            }
+//
+//            public async Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
+//            {
+//                var transportMessage = await _innerTransport.Receive(context, cancellationToken);
+//                if (transportMessage == null) return null;
+//
+//                var shouldFailThisTime = Interlocked.Increment(ref _failCounter) % _failFactor == 0;
+//
+//                if (shouldFailThisTime)
+//                {
+//                    context.OnCommitted(async () =>
+//                    {
+//                        throw new Exception("oh noes!!!!!");
+//                    });
+//                }
+//
+//                return transportMessage;
+//            }
+//
+//            public string Address
+//            {
+//                get { return _innerTransport.Address; }
+//            }
+//        }
 
         class MyMessage
         {
@@ -294,12 +231,12 @@ namespace Rebus.Idempotency.Tests
             }
         }
 
-        class MyIdempotentHandler : IHandleMessages<MyMessage>
+        class MyMessageHandler : IHandleMessages<MyMessage>
         {
             private readonly IBus _bus;
             private readonly ConcurrentQueue<DateTime> _sentMessages;
 
-            public MyIdempotentHandler(IBus bus, ConcurrentQueue<DateTime> messages)
+            public MyMessageHandler(IBus bus, ConcurrentQueue<DateTime> messages)
             {
                 _bus = bus;
                 _sentMessages = messages;
