@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using Rebus.Activation;
 using Rebus.Bus;
@@ -9,9 +8,7 @@ using Rebus.Config;
 using Rebus.Handlers;
 using Rebus.Idempotency;
 using Rebus.Idempotency.Persistence;
-using Rebus.Logging;
 using Rebus.Messages;
-using Rebus.Transport;
 using Rebus.Transport.InMem;
 
 namespace ConsoleApp1

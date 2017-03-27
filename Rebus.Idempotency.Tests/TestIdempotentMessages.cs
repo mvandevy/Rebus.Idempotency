@@ -39,7 +39,6 @@ namespace Rebus.Idempotency.Tests
                     t.Decorate(c =>
                     {
                         var transport = c.Get<ITransport>();
-                        //transport = new IntroducerOfTransportInstability(transport, MakeEveryFifthMessageFail);
                         return new TransportCounter(transport, _transportMessagesSent, _transportMessagesReceived);
                     });
                 })
@@ -65,7 +64,21 @@ namespace Rebus.Idempotency.Tests
         }
 
         [Fact]
-        public async Task ResendOfOriginalMessageDoesntResultInReprocessing()
+        public async Task AllMessageHandlersAreTriggered()
+        {
+            var handlersTriggered = new ConcurrentQueue<DateTime>();
+            _activator.Register((b, context) => new MyMessageHandler(b, handlersTriggered));
+            _activator.Register((b, context) => new MyMessageHandler2(b, handlersTriggered));
+
+            await _bus.SendLocal(new MyMessage());
+
+            await Task.Delay(1000);
+
+            Assert.Equal(2, handlersTriggered.Count);
+        }
+
+        [Fact]
+        public async Task ResendOfOriginalMessageWithSingleHandlerDoesntResultInReprocessing()
         {
             var handlersTriggered = new ConcurrentQueue<DateTime>();
             _activator.Register((b, context) => new MyMessageHandler(b, handlersTriggered));
@@ -87,53 +100,33 @@ namespace Rebus.Idempotency.Tests
             Assert.Equal(2, _transportMessagesReceived[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
         }
 
-        [Theory]
-        [InlineData(10)]
-        public async Task SlowReceiveOfDuplicateMessagesTriggersAllOutgoingMessages(int total)
+        [Fact]
+        public async Task ResendOfOriginalMessageWithMultipleHandlersDoesntResultInReprocessing()
         {
-            if (total < MakeEveryFifthMessageFail)
+            var handlersTriggered = new ConcurrentQueue<DateTime>();
+            _activator.Register((b, context) => new MyMessageHandler(b, handlersTriggered));
+            _activator.Register((b, context) => new MyMessageHandler2(b, handlersTriggered));
+
+            var msgToSend = new MyMessage
             {
-                Assert.True(false, "Fail factor must be less than or equal to total!");
-            }
+                Id = 1,
+                Total = 2,
+                SendOutgoingMessage = true
+            };
 
-            var myMessageHandlersTriggered = new ConcurrentQueue<DateTime>();
-            var outgoingMessageHandlersTriggered = new ConcurrentQueue<OutgoingMessage>();
-
-            _activator.Register((b, context) => new MyMessageHandler(b, myMessageHandlersTriggered));
-            _activator.Register(() => new OutgoingMessageCollector(outgoingMessageHandlersTriggered));
-
-            var messagesToSend = Enumerable
-                .Range(0, total)
-                .Select(id => new MyMessage
-                {
-                    Id = 1,
-                    Total = total,
-                    SendOutgoingMessage = true
-                })
-                .ToList();
             var headers = HeaderHelper.ConstructHeadersWithMessageId();
+            await _bus.SendLocal(msgToSend, headers);
+            await _bus.SendLocal(msgToSend, headers);
 
-            messagesToSend.ForEach(async message =>
-            {
-                await _bus.SendLocal(message, headers);
-                await Task.Delay(100);
-            });
+            await Task.Delay(1000);
 
-            Console.WriteLine("All messages processed - waiting for messages in outgoing message collector...");
-
-            await Task.Delay(2000);
-
-            Assert.Equal(1, myMessageHandlersTriggered.Count);
-            Assert.Equal(total, _transportMessagesReceived[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
-            Assert.Equal(total, _transportMessagesReceived[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
-            Assert.Equal(total, _transportMessagesSent[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
-            Assert.Equal(total, _transportMessagesSent[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
-            Assert.Equal(1, outgoingMessageHandlersTriggered.Count);
+            Assert.Equal(2, handlersTriggered.Count);
+            Assert.Equal(2, _transportMessagesReceived[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
         }
 
         [Theory]
         [InlineData(10)]
-        public async Task OutgoingMessagesAreAllRetriggered(int total)
+        public async Task OutgoingMessagesAreAllRetriggeredWithSingleHandler(int total)
         {
             if (total < MakeEveryFifthMessageFail)
             {
@@ -171,53 +164,52 @@ namespace Rebus.Idempotency.Tests
             Assert.Equal(1, outgoingMessageHandlersTriggered.Count);
         }
 
-        
+        [Theory]
+        [InlineData(10)]
+        public async Task OutgoingMessagesAreAllRetriggeredWithMultipleHandlers(int total)
+        {
+            if (total < MakeEveryFifthMessageFail)
+            {
+                Assert.True(false, "Fail factor must be less than or equal to total!");
+            }
 
-//        class IntroducerOfTransportInstability : ITransport
-//        {
-//            readonly ITransport _innerTransport;
-//            readonly int _failFactor;
-//            int _failCounter;
-//
-//            public IntroducerOfTransportInstability(ITransport innerTransport, int failFactor)
-//            {
-//                _innerTransport = innerTransport;
-//                _failFactor = failFactor;
-//            }
-//
-//            public void CreateQueue(string address)
-//            {
-//                _innerTransport.CreateQueue(address);
-//            }
-//
-//            public async Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
-//            {
-//                await _innerTransport.Send(destinationAddress, message, context);
-//            }
-//
-//            public async Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
-//            {
-//                var transportMessage = await _innerTransport.Receive(context, cancellationToken);
-//                if (transportMessage == null) return null;
-//
-//                var shouldFailThisTime = Interlocked.Increment(ref _failCounter) % _failFactor == 0;
-//
-//                if (shouldFailThisTime)
-//                {
-//                    context.OnCommitted(async () =>
-//                    {
-//                        throw new Exception("oh noes!!!!!");
-//                    });
-//                }
-//
-//                return transportMessage;
-//            }
-//
-//            public string Address
-//            {
-//                get { return _innerTransport.Address; }
-//            }
-//        }
+            var myMessageHandlersTriggered = new ConcurrentQueue<DateTime>();
+            var outgoingMessageHandlersTriggered = new ConcurrentQueue<OutgoingMessage>();
+            var outgoingMessage2HandlersTriggered = new ConcurrentQueue<OutgoingMessage2>();
+
+            _activator.Register((b, context) => new MyMessageHandler(b, myMessageHandlersTriggered));
+            _activator.Register((b, context) => new MyMessageHandler2(b, myMessageHandlersTriggered));
+            _activator.Register(() => new OutgoingMessageCollector(outgoingMessageHandlersTriggered));
+            _activator.Register(() => new OutgoingMessage2Collector(outgoingMessage2HandlersTriggered));
+
+            var messagesToSend = Enumerable
+                .Range(0, total)
+                .Select(id => new MyMessage
+                {
+                    Id = 1,
+                    Total = total,
+                    SendOutgoingMessage = true
+                })
+                .ToList();
+            var headers = HeaderHelper.ConstructHeadersWithMessageId();
+
+            await Task.WhenAll(messagesToSend.Select(message => _bus.SendLocal(message, headers)));
+
+            Console.WriteLine("All messages processed - waiting for messages in outgoing message collector...");
+
+            await Task.Delay(2000);
+
+            Assert.Equal(2, myMessageHandlersTriggered.Count);
+            Assert.Equal(total, _transportMessagesReceived[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(total, _transportMessagesReceived[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(total, _transportMessagesReceived[typeof(OutgoingMessage2).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(total, _transportMessagesSent[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(total, _transportMessagesSent[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(total, _transportMessagesSent[typeof(OutgoingMessage2).GetSimpleAssemblyQualifiedName()]);
+            Assert.Equal(1, outgoingMessageHandlersTriggered.Count);
+            Assert.Equal(1, outgoingMessage2HandlersTriggered.Count);
+        }
+
 
         class MyMessage
         {
@@ -253,7 +245,34 @@ namespace Rebus.Idempotency.Tests
             }
         }
 
+        class MyMessageHandler2 : IHandleMessages<MyMessage>
+        {
+            private readonly IBus _bus;
+            private readonly ConcurrentQueue<DateTime> _messagesSentOn;
+
+            public MyMessageHandler2(IBus bus, ConcurrentQueue<DateTime> messagesSentOn)
+            {
+                _bus = bus;
+                _messagesSentOn = messagesSentOn;
+            }
+
+            public async Task Handle(MyMessage message)
+            {
+                _messagesSentOn.Enqueue(DateTime.Now);
+
+                if (message.SendOutgoingMessage)
+                {
+                    await _bus.SendLocal(new OutgoingMessage2 {Id = message.Id});
+                }
+            }
+        }
+
         class OutgoingMessage
+        {
+            public int Id { get; set; }
+        }
+
+        class OutgoingMessage2
         {
             public int Id { get; set; }
         }
@@ -269,6 +288,23 @@ namespace Rebus.Idempotency.Tests
 
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
             public async Task Handle(OutgoingMessage message)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+            {
+                _receivedMessages.Enqueue(message);
+            }
+        }
+
+        class OutgoingMessage2Collector : IHandleMessages<OutgoingMessage2>
+        {
+            readonly ConcurrentQueue<OutgoingMessage2> _receivedMessages;
+
+            public OutgoingMessage2Collector(ConcurrentQueue<OutgoingMessage2> receivedMessages)
+            {
+                _receivedMessages = receivedMessages;
+            }
+
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+            public async Task Handle(OutgoingMessage2 message)
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
             {
                 _receivedMessages.Enqueue(message);
