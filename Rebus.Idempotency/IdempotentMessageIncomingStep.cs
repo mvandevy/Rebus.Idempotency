@@ -74,9 +74,6 @@ namespace Rebus.Idempotency
                     {
                         _log.Info("Found no outgoing messages to be (re-)sent...");
                     }
-
-                    // ignore the message by skipping the invocation of the message handler, ie. handlerInvoker.SkipInvocation();
-                    //return;
                 }
                 else
                 {

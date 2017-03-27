@@ -30,8 +30,9 @@ namespace Rebus.Idempotency
             var message = context.Load<Message>();
             var messageId = message.GetMessageId();
 
-            var messageData = await _msgStorage.Find(messageId);
             var transactionContext = context.Load<ITransactionContext>();
+            var messageData = await _msgStorage.Find(messageId) ?? new MessageData() { MessageId = messageId };
+            
             TryMountMessageDataOnTransactionContext(messageData, transactionContext);
 
             // invoke the rest of the pipeline (most likely also dispatching the incoming message to the now-ready saga handlers)
