@@ -9,10 +9,10 @@ namespace Rebus.Idempotency
     public class MessageData
     {
         public string MessageId { get; set; }
-        public IdempotencyData IdempotencyData;
         public string InputQueueAddress { get; set; }
         public int? ProcessingThreadId { get; set; }
-        public DateTime TimeThreadIdAssigned { get; set; }
+        public DateTime? TimeThreadIdAssigned { get; set; }
+        public IdempotencyData IdempotencyData { get; set; }
 
         public MessageData()
         {

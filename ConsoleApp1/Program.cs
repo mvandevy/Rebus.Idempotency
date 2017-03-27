@@ -22,7 +22,6 @@ namespace ConsoleApp1
         {
             BuiltinHandlerActivator _activator;
             IBus _bus;
-            ConcurrentDictionary<string, MessageData> _persistentMessageData;
 
             _activator = new BuiltinHandlerActivator();
 
@@ -137,7 +136,9 @@ namespace ConsoleApp1
             _receivedMessages = receivedMessages;
         }
 
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
         public async Task Handle(OutgoingMessage message)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
         {
             Console.WriteLine($"OUTGOING: Handled outgoing message with id {message.Id}");
             _receivedMessages.Enqueue(message);

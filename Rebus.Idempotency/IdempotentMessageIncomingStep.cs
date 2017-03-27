@@ -47,9 +47,7 @@ namespace Rebus.Idempotency
                 _log.Info($"Checking if message with ID {messageId} has already been processed before.");
 
                 var messageData = (MessageData) temp;
-                // no saga handlers for this message, so we can look after its idempotency
                 if (messageData.HasAlreadyHandled(messageId))
-                    // is the message id present in the history table?
                 {
                     _log.Info($"Message with ID {messageId} has already been handled");
 
@@ -87,7 +85,7 @@ namespace Rebus.Idempotency
                     {
                         _log.Info($"Message with ID {messageId} is ignored as it already is being processed.");
                         // ignore the message or maybe return as in 'Assigned' state
-                        // should we retry once a message has been assigned for too long? What is too long? By default 5m?
+                        // todo: should we retry once a message has been assigned for too long? What is too long? By default 5m?
                         return;
                     }
 
@@ -96,7 +94,7 @@ namespace Rebus.Idempotency
                     // insert the message or update it with the current input queue address, the current thread id and the current date
                     messageData.InputQueueAddress = _transport.Address;
                     messageData.ProcessingThreadId = threadId;
-                    messageData.TimeThreadIdAssigned = DateTime.Now;
+                    messageData.TimeThreadIdAssigned = DateTime.UtcNow;
                     await _msgStorage.InsertOrUpdate(messageData);
 
                     // hand the message of to the next pipeline step
@@ -105,11 +103,10 @@ namespace Rebus.Idempotency
                     _log.Info($"Marking the message with ID {messageId} as been handled.");
                     messageData.MarkMessageAsHandled();
                 }
-
-
             }
             else
             {
+                // The LoadMessageDataStep was not triggered 
                 await next();
             }
         }

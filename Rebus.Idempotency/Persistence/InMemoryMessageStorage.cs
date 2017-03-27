@@ -15,7 +15,9 @@ namespace Rebus.Idempotency.Persistence
             TypeNameHandling = TypeNameHandling.All
         };
 
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
         public async Task<MessageData> Find(string messageId)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
         {
             lock (_lock)
             {
@@ -32,7 +34,9 @@ namespace Rebus.Idempotency.Persistence
             }
         }
 
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
         public async Task<bool> IsProcessing(string messageId)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
         {
             lock (_lock)
             {
@@ -50,7 +54,9 @@ namespace Rebus.Idempotency.Persistence
             return JsonConvert.DeserializeObject<MessageData>(serializedObject, _serializerSettings);
         }
 
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
         public async Task InsertOrUpdate(MessageData messageData)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
         {
             if (messageData == null)
             {

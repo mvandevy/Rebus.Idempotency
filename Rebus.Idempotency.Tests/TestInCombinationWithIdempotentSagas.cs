@@ -250,7 +250,9 @@ namespace Rebus.Idempotency.Tests
                 _receivedMessages = receivedMessages;
             }
 
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
             public async Task Handle(OutgoingMessage message)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
             {
                 _receivedMessages.Enqueue(message);
             }

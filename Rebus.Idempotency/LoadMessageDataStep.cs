@@ -43,7 +43,11 @@ namespace Rebus.Idempotency
 
         private void TryMountMessageDataOnTransactionContext(MessageData messageData, ITransactionContext transactionContext)
         {
-            _log.Info($"Mounting message data for message with ID {messageData.MessageId} onto the transactioncontext.");
+            if (messageData != null)
+            {
+                _log.Info($"Mounting message data for message with ID {messageData.MessageId} onto the transactioncontext.");
+            }
+            
             transactionContext?.Items.AddOrUpdate(
                 Keys.MessageData,
                 messageData,
@@ -52,8 +56,11 @@ namespace Rebus.Idempotency
 
         private async Task SaveMessageData(MessageData messageData)
         {
+            if (messageData != null)
+            {
                 _log.Info($"Saving the message data for message with ID {messageData.MessageId} into the message store.");
-                await _msgStorage.InsertOrUpdate(messageData);
+            }
+            await _msgStorage.InsertOrUpdate(messageData);
         }
     }
 }
