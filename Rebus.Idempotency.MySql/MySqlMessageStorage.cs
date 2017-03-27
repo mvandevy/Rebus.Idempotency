@@ -183,6 +183,28 @@ namespace Rebus.Idempotency.MySql
             }
         }
 
+        public async Task Cleanup(TimeSpan olderThan)
+        {
+            if (olderThan.TotalSeconds <= 0) return;
+
+            using (var connection = await _connectionHelper.GetConnection())
+            {
+                _log.Info($"Cleaning up idempotency message table '{_dataTableName}'. Removing items older than {olderThan.TotalMinutes} minutes.");
+
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText =
+                        $@"
+                            DELETE FROM {_dataTableName} 
+                            WHERE `time_thread_id_assigned` < TIMESTAMPADD(MINUTE,{olderThan.TotalMinutes},NOW());
+                        ";
+
+                    command.ExecuteNonQuery();
+                }
+
+                connection.Complete();
+            }
+        }
 
         public void Dispose()
         {
@@ -196,5 +218,7 @@ namespace Rebus.Idempotency.MySql
                 _disposed = true;
             }
         }
+
+        
     }
 }
