@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Rebus.Activation;
 using Rebus.Bus;
+using Rebus.Persistence.InMem;
 using Rebus.Config;
 using Rebus.Extensions;
 using Rebus.Handlers;
@@ -30,7 +31,7 @@ namespace Rebus.Idempotency.Tests
             _activator = Using(new BuiltinHandlerActivator());
 
             _bus = Configure.With(_activator)
-                .Logging(l => l.Console(LogLevel.Info))
+                .Logging(l => l.Console(LogLevel.Debug))
                 .Transport(t =>
                 {
                     t.UseInMemoryTransport(new InMemNetwork(), "bimse");
@@ -40,6 +41,7 @@ namespace Rebus.Idempotency.Tests
                         return new TransportCounter(transport, _transportMessagesSent, _transportMessagesReceived);
                     });
                 })
+                .Sagas(s => s.StoreInMemory())
                 .Options(o =>
                 {
                     o.EnableIdempotentMessages(new InMemoryMessageStorage());
@@ -75,7 +77,6 @@ namespace Rebus.Idempotency.Tests
             await _bus.SendLocal(new MyMessage());
 
             await Task.Delay(1000);
-
             Assert.Equal(1, sagaHandlersTriggered.Count);
             Assert.Equal(1, plainHandlersTriggered.Count);
         }
