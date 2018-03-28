@@ -49,7 +49,7 @@ namespace Rebus.Idempotency
                 var messageData = (MessageData) temp;
                 if (messageData.HasAlreadyHandled(messageId))
                 {
-                    _log.Info($"Message with ID {messageId} has already been handled");
+                    _log.Warn($"Message with ID {messageId} has already been handled");
 
                     var outgoingMessages = messageData
                         .GetOutgoingMessages()
@@ -80,7 +80,10 @@ namespace Rebus.Idempotency
                     _log.Info($"Message with ID {messageId} has not been handled yet.");
                     if (await _msgStorage.IsProcessing(messageId)) // does the message have an assigned thread id?
                     {
-                        _log.Info($"Message with ID {messageId} is ignored as it already is being processed.");
+                        _log.Warn($"Message with ID {messageId} is ignored as it already is being processed.");
+                        messageData.MarkMessageAsDuplicate();
+                        var waitTask = Task.Delay(5000);
+                        Task.WaitAll(waitTask);
                         // ignore the message or maybe return as in 'Assigned' state
                         // todo: should we retry once a message has been assigned for too long? What is too long? By default 5m?
                         return;
@@ -88,6 +91,7 @@ namespace Rebus.Idempotency
 
                     var threadId = Thread.CurrentThread.ManagedThreadId;
                     _log.Info($"Updating message storage for the message with ID {messageId} as being processed by thread {threadId}");
+
                     // insert the message or update it with the current input queue address, the current thread id and the current date
                     messageData.InputQueueAddress = _transport.Address;
                     messageData.ProcessingThreadId = threadId;

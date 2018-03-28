@@ -14,6 +14,8 @@ namespace Rebus.Idempotency
         public DateTime? TimeThreadIdAssigned { get; set; }
         public IdempotencyData IdempotencyData { get; set; }
 
+        public bool IsDuplicate { get; private set; }
+
         public MessageData()
         {
             IdempotencyData = new IdempotencyData();
@@ -21,7 +23,8 @@ namespace Rebus.Idempotency
 
         public bool HasAlreadyHandled(string messageId)
         {
-            return IdempotencyData.HasAlreadyHandled(messageId);
+            var isAlreadyHandled = IdempotencyData.HasAlreadyHandled(messageId);           
+            return isAlreadyHandled;
         }
 
         public IEnumerable<OutgoingMessage> GetOutgoingMessages()
@@ -37,6 +40,16 @@ namespace Rebus.Idempotency
         public void AddOutgoingMessage(string messageId, DestinationAddresses destinationAddresses, TransportMessage transportMessage)
         {
             IdempotencyData.AddOutgoingMessage(messageId, destinationAddresses, transportMessage);
+        }
+
+        public void MarkMessageAsDuplicate()
+        {
+            this.IsDuplicate = true;
+        }
+
+        public bool CanBeSaved()
+        {
+            return !this.IsDuplicate;
         }
     }
 }
