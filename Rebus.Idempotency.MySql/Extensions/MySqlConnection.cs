@@ -11,7 +11,7 @@ namespace Rebus.Idempotency.MySql.Extensions
 
             using (var command = connection.CreateCommand())
             {
-                command.CommandText = "select * from information_schema.tables where table_schema not in ('pg_catalog', 'information_schema')";
+                command.CommandText = "select * from information_schema.tables where table_schema not in ('pg_catalog', 'information_schema', 'ServiceBus')";
 
                 using (var reader = command.ExecuteReader())
                 {
