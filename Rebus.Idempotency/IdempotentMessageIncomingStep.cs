@@ -22,11 +22,9 @@ namespace Rebus.Idempotency
         /// </summary>
         public IdempotentMessageIncomingStep(ITransport transport, IMessageStorage messageStorage, IRebusLoggerFactory rebusLoggerFactory)
         {
-            if (transport == null) throw new ArgumentNullException(nameof(transport));
-            if (messageStorage == null) throw new ArgumentNullException(nameof(messageStorage));
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
-            _transport = transport;
-            _msgStorage = messageStorage;
+            _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+            _msgStorage = messageStorage ?? throw new ArgumentNullException(nameof(messageStorage));
             _log = rebusLoggerFactory.GetLogger<IdempotentMessageIncomingStep>();
         }
 
@@ -37,16 +35,15 @@ namespace Rebus.Idempotency
         public async Task Process(IncomingStepContext context, Func<Task> next)
         {
             var message = context.Load<Message>();
-            var messageId = message.GetMessageId();
+            var messageId = GetMessageId(message);
 
             var transactionContext = context.Load<ITransactionContext>();
 
-            object temp;
-            if (transactionContext.Items.TryGetValue(Keys.MessageData, out temp))
+            if (transactionContext.Items.TryGetValue(Keys.MessageData, out object temp))
             {
                 _log.Info($"Checking if message with ID {messageId} has already been processed before.");
 
-                var messageData = (MessageData) temp;
+                var messageData = (MessageData)temp;
                 if (messageData.HasAlreadyHandled(messageId))
                 {
                     _log.Warn($"Message with ID {messageId} has already been handled");
@@ -109,6 +106,16 @@ namespace Rebus.Idempotency
             {
                 // The LoadMessageDataStep was not triggered 
                 await next();
+            }
+
+            string GetMessageId(Message msg)
+            {
+                var deferCount = message.Headers.TryGetValue(Headers.DeferCount, out var result)
+                    ? int.Parse(result)
+                    : 0;
+
+                // if the message got defered, it needs a new ID in terms of idempotency.
+                return msg.GetMessageId() + (deferCount > 0 ? $"-{deferCount}" : "");
             }
         }
     }

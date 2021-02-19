@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Rebus.Activation;
 using Rebus.Bus;
@@ -11,7 +9,7 @@ using Rebus.Extensions;
 using Rebus.Handlers;
 using Rebus.Idempotency.Persistence;
 using Rebus.Logging;
-using Rebus.Messages;
+using Rebus.Persistence.InMem;
 using Rebus.Transport;
 using Rebus.Transport.InMem;
 using Xunit;
@@ -23,15 +21,28 @@ namespace Rebus.Idempotency.Tests
     {
         const int MakeEveryFifthMessageFail = 5;
         private readonly BuiltinHandlerActivator _activator;
-        private readonly IBus _bus;
+        private IBus _bus;
         private readonly ConcurrentDictionary<string, int> _transportMessagesSent = new ConcurrentDictionary<string, int>();
         private readonly ConcurrentDictionary<string, int> _transportMessagesReceived = new ConcurrentDictionary<string, int>();
 
         public TestIdempotentMessages()
         {
             _activator = Using(new BuiltinHandlerActivator());
+        }
 
-            _bus = Configure.With(_activator)
+        private IBus Bus
+        {
+            get
+            {
+                if (_bus == null)
+                    _bus = ActivateBus();
+                return _bus;
+            }
+        }
+
+        private IBus ActivateBus()
+        {
+            return Configure.With(_activator)
                 .Logging(l => l.Console(LogLevel.Info))
                 .Transport(t =>
                 {
@@ -42,6 +53,7 @@ namespace Rebus.Idempotency.Tests
                         return new TransportCounter(transport, _transportMessagesSent, _transportMessagesReceived);
                     });
                 })
+                .Timeouts(t => t.StoreInMemory())
                 .Options(o =>
                 {
                     o.EnableIdempotentMessages(new InMemoryMessageStorage());
@@ -49,6 +61,7 @@ namespace Rebus.Idempotency.Tests
                 })
                 .Start();
         }
+        
 
         [Fact]
         public async Task MyMessageHandlerIsTriggered()
@@ -56,11 +69,11 @@ namespace Rebus.Idempotency.Tests
             var handlersTriggered = new ConcurrentQueue<DateTime>();
             _activator.Register((b, context) => new MyMessageHandler(b, handlersTriggered));
 
-            await _bus.SendLocal(new MyMessage());
+            await Bus.SendLocal(new MyMessage());
 
             await Task.Delay(1000);
 
-            Assert.Equal(1, handlersTriggered.Count);
+            Assert.Single(handlersTriggered);
         }
 
         [Fact]
@@ -70,7 +83,7 @@ namespace Rebus.Idempotency.Tests
             _activator.Register((b, context) => new MyMessageHandler(b, handlersTriggered));
             _activator.Register((b, context) => new MyMessageHandler2(b, handlersTriggered));
 
-            await _bus.SendLocal(new MyMessage());
+            await Bus.SendLocal(new MyMessage());
 
             await Task.Delay(1000);
 
@@ -91,13 +104,37 @@ namespace Rebus.Idempotency.Tests
             };
 
             var headers = HeaderHelper.ConstructHeadersWithMessageId();
-            await _bus.SendLocal(msgToSend, headers);
-            await _bus.SendLocal(msgToSend, headers);
+            await Bus.SendLocal(msgToSend, headers);
+            await Bus.SendLocal(msgToSend, headers);
 
             await Task.Delay(1000);
 
-            Assert.Equal(1, handlersTriggered.Count);
+            Assert.Single(handlersTriggered);
             Assert.Equal(2, _transportMessagesReceived[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
+        }
+
+        [Fact]
+        public async Task DeferedOriginalMessageWithSingleHandlerDoesResultInReprocessing()
+        {
+            var handlersTriggered = new ConcurrentQueue<DateTime>();
+            _activator.Register((b, context) => new MyMessageHandler(b, handlersTriggered));
+
+            var msgToSend = new MyMessage
+            {
+                Id = 1,
+                Total = 1,
+                SendOutgoingMessage = false
+            };
+
+            var headers = HeaderHelper.ConstructHeadersWithMessageId();
+            await Bus.SendLocal(msgToSend, headers);
+            await Bus.DeferLocal(TimeSpan.FromSeconds(1), msgToSend, headers);
+
+            await Task.Delay(5000);
+
+            Assert.Equal(2, handlersTriggered.Count);
+            // Received 3 times (1 first message + 1 to defer + 1 again defer message)
+            Assert.Equal(3, _transportMessagesReceived[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
         }
 
         [Fact]
@@ -115,10 +152,10 @@ namespace Rebus.Idempotency.Tests
             };
 
             var headers = HeaderHelper.ConstructHeadersWithMessageId();
-            await _bus.SendLocal(msgToSend, headers);
-            await _bus.SendLocal(msgToSend, headers);
+            await Bus.SendLocal(msgToSend, headers);
+            await Bus.SendLocal(msgToSend, headers);
 
-            await Task.Delay(1000);
+            await Task.Delay(10000);
 
             Assert.Equal(2, handlersTriggered.Count);
             Assert.Equal(2, _transportMessagesReceived[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
@@ -150,18 +187,18 @@ namespace Rebus.Idempotency.Tests
                 .ToList();
             var headers = HeaderHelper.ConstructHeadersWithMessageId();
 
-            await Task.WhenAll(messagesToSend.Select(message => _bus.SendLocal(message, headers)));
+            await Task.WhenAll(messagesToSend.Select(message => Bus.SendLocal(message, headers)));
 
             Console.WriteLine("All messages processed - waiting for messages in outgoing message collector...");
 
             await Task.Delay(2000);
 
-            Assert.Equal(1, myMessageHandlersTriggered.Count);
+            Assert.Single(myMessageHandlersTriggered);
             Assert.Equal(total, _transportMessagesReceived[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
             Assert.Equal(total, _transportMessagesReceived[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
             Assert.Equal(total, _transportMessagesSent[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
             Assert.Equal(total, _transportMessagesSent[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
-            Assert.Equal(1, outgoingMessageHandlersTriggered.Count);
+            Assert.Single(outgoingMessageHandlersTriggered);
         }
 
         [Theory]
@@ -193,7 +230,7 @@ namespace Rebus.Idempotency.Tests
                 .ToList();
             var headers = HeaderHelper.ConstructHeadersWithMessageId();
 
-            await Task.WhenAll(messagesToSend.Select(message => _bus.SendLocal(message, headers)));
+            await Task.WhenAll(messagesToSend.Select(message => Bus.SendLocal(message, headers)));
 
             Console.WriteLine("All messages processed - waiting for messages in outgoing message collector...");
 
@@ -206,8 +243,8 @@ namespace Rebus.Idempotency.Tests
             Assert.Equal(total, _transportMessagesSent[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
             Assert.Equal(total, _transportMessagesSent[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
             Assert.Equal(total, _transportMessagesSent[typeof(OutgoingMessage2).GetSimpleAssemblyQualifiedName()]);
-            Assert.Equal(1, outgoingMessageHandlersTriggered.Count);
-            Assert.Equal(1, outgoingMessage2HandlersTriggered.Count);
+            Assert.Single(outgoingMessageHandlersTriggered);
+            Assert.Single(outgoingMessage2HandlersTriggered);
         }
 
 
