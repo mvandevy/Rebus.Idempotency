@@ -44,6 +44,7 @@ namespace Rebus.Idempotency
                 _log.Info($"Checking if message with ID {messageId} has already been processed before.");
 
                 var messageData = (MessageData)temp;
+                messageData.MessageId = messageId;
                 if (messageData.HasAlreadyHandled(messageId))
                 {
                     _log.Warn($"Message with ID {messageId} has already been handled");
