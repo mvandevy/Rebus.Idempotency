@@ -22,15 +22,27 @@ namespace Rebus.Idempotency.Tests
     public class TestInCombinationWithIdempotentSagas : UnitTestBase
     {
         private readonly BuiltinHandlerActivator _activator;
-        private readonly IBus _bus;
+        private IBus _bus;
         private readonly ConcurrentDictionary<string, int> _transportMessagesSent = new ConcurrentDictionary<string, int>();
         private readonly ConcurrentDictionary<string, int> _transportMessagesReceived = new ConcurrentDictionary<string, int>();
 
         public TestInCombinationWithIdempotentSagas()
         {
             _activator = Using(new BuiltinHandlerActivator());
+        }
 
-            _bus = Configure.With(_activator)
+        private IBus Bus
+        {
+            get {
+                if(_bus == null)
+                    _bus = ActivateBus();
+                return _bus;
+            }
+        }
+
+        private IBus ActivateBus()
+        {
+            return Configure.With(_activator)
                 .Logging(l => l.Console(LogLevel.Debug))
                 .Transport(t =>
                 {
@@ -57,11 +69,11 @@ namespace Rebus.Idempotency.Tests
             var handlersTriggered = new ConcurrentQueue<DateTime>();
             _activator.Register((b, context) => new MyMessageSaga(allMessagesReceived, b, handlersTriggered));
 
-            await _bus.SendLocal(new MyMessage());
+            await Bus.SendLocal(new MyMessage());
 
             await Task.Delay(1000);
 
-            Assert.Equal(1, handlersTriggered.Count);
+            Assert.Single(handlersTriggered);
         }
 
         [Fact]
@@ -74,11 +86,11 @@ namespace Rebus.Idempotency.Tests
             _activator.Register((b, context) => new MyMessageSaga(allMessagesReceived, b, sagaHandlersTriggered));
             _activator.Register((b, context) => new MyMessageHandler(b, plainHandlersTriggered));
 
-            await _bus.SendLocal(new MyMessage());
+            await Bus.SendLocal(new MyMessage());
 
             await Task.Delay(1000);
-            Assert.Equal(1, sagaHandlersTriggered.Count);
-            Assert.Equal(1, plainHandlersTriggered.Count);
+            Assert.Single(sagaHandlersTriggered);
+            Assert.Single(plainHandlersTriggered);
         }
 
 
@@ -100,17 +112,17 @@ namespace Rebus.Idempotency.Tests
             };
 
             var headers = HeaderHelper.ConstructHeadersWithMessageId();
-            await _bus.SendLocal(msgToSend, headers);
-            await _bus.SendLocal(msgToSend, headers);
+            await Bus.SendLocal(msgToSend, headers);
+            await Bus.SendLocal(msgToSend, headers);
 
             await Task.Delay(1000);
 
-            Assert.Equal(1, myMessageHandlersTriggered.Count);
+            Assert.Single(myMessageHandlersTriggered);
             Assert.Equal(2, _transportMessagesReceived[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
             Assert.Equal(2, _transportMessagesReceived[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
             Assert.Equal(2, _transportMessagesSent[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
             Assert.Equal(2, _transportMessagesSent[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
-            Assert.Equal(1, outgoingMessageHandlersTriggered.Count);
+            Assert.Single(outgoingMessageHandlersTriggered);
         }
 
         [Fact]
@@ -133,13 +145,13 @@ namespace Rebus.Idempotency.Tests
             };
 
             var headers = HeaderHelper.ConstructHeadersWithMessageId();
-            await _bus.SendLocal(msgToSend, headers);
-            await _bus.SendLocal(msgToSend, headers);
+            await Bus.SendLocal(msgToSend, headers);
+            await Bus.SendLocal(msgToSend, headers);
 
             await Task.Delay(1000);
 
-            Assert.Equal(1, sagaHandlersTriggered.Count);
-            Assert.Equal(1, plainHandlersTriggered.Count);
+            Assert.Single(sagaHandlersTriggered);
+            Assert.Single(plainHandlersTriggered);
             Assert.Equal(2, _transportMessagesReceived[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
             Assert.Equal(4, _transportMessagesReceived[typeof(OutgoingMessage).GetSimpleAssemblyQualifiedName()]);
             Assert.Equal(2, _transportMessagesSent[typeof(MyMessage).GetSimpleAssemblyQualifiedName()]);
