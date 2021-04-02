@@ -35,7 +35,7 @@ namespace Rebus.Idempotency
         public async Task Process(IncomingStepContext context, Func<Task> next)
         {
             var message = context.Load<Message>();
-            var messageId = GetMessageId(message);
+            var messageId = message.GetMessageIdWithDeferCount();
 
             var transactionContext = context.Load<ITransactionContext>();
 
@@ -107,16 +107,6 @@ namespace Rebus.Idempotency
             {
                 // The LoadMessageDataStep was not triggered 
                 await next();
-            }
-
-            string GetMessageId(Message msg)
-            {
-                var deferCount = message.Headers.TryGetValue(Headers.DeferCount, out var result)
-                    ? int.Parse(result)
-                    : 0;
-
-                // if the message got defered, it needs a new ID in terms of idempotency.
-                return msg.GetMessageId() + (deferCount > 0 ? $"-{deferCount}" : "");
             }
         }
     }
