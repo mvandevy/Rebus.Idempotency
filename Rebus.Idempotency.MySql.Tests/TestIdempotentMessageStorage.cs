@@ -58,7 +58,7 @@ namespace Rebus.Idempotency.MySql.Tests
             idempotencyData.MarkMessageAsHandled(Guid.NewGuid().ToString());
             idempotencyData.AddOutgoingMessage(
                 Guid.NewGuid().ToString(), 
-                new []{ "test_destination"}, 
+                new []{ "test_destination" }, 
                 new TransportMessage(new Dictionary<string, string>(), Encoding.ASCII.GetBytes("test_body")));
 
             var msgData = new MessageData

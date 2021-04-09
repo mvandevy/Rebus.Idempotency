@@ -28,7 +28,7 @@ namespace Rebus.Idempotency
         public async Task Process(IncomingStepContext context, Func<Task> next)
         {
             var message = context.Load<Message>();
-            var messageId = message.GetMessageId();
+            var messageId = message.GetMessageIdWithDeferCount();
 
             var transactionContext = context.Load<ITransactionContext>();
             var messageData = await _msgStorage.Find(messageId) ?? new MessageData() { MessageId = messageId };

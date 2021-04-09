@@ -29,8 +29,7 @@ namespace Rebus.Idempotency
         {
             var transactionContext = context.Load<ITransactionContext>();
 
-            object temp;
-            if (transactionContext.Items.TryGetValue(Keys.MessageData, out temp))
+            if (transactionContext.Items.TryGetValue(Keys.MessageData, out object temp))
             {
                 var msgData = (MessageData)temp;
 
@@ -39,7 +38,7 @@ namespace Rebus.Idempotency
                     var transportMessage = context.Load<TransportMessage>();
                     var destinationAddresses = context.Load<DestinationAddresses>();
                     var incomingStepContext = transactionContext.Items.GetOrThrow<IncomingStepContext>(StepContext.StepContextKey);
-                    var messageId = incomingStepContext.Load<Message>().GetMessageId();
+                    var messageId = incomingStepContext.Load<Message>().GetMessageIdWithDeferCount();
 
                     _log.Info($"Adding outgoing message with ID {transportMessage.Headers[Headers.MessageId]} for message with ID {msgData.MessageId} onto the message data.");
                     msgData.AddOutgoingMessage(messageId, destinationAddresses, transportMessage);

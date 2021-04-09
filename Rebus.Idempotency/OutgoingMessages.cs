@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 
 namespace Rebus.Idempotency
 {
@@ -39,6 +37,9 @@ namespace Rebus.Idempotency
         /// </summary>
         public void Add(OutgoingMessage outgoingMessage)
         {
+            // A message should not send itself, as it might end up in an infinite loop
+            if(outgoingMessage.TransportMessage.GetMessageIdWithDeferCount() == MessageId) return;
+
             _messagesToSend.Add(outgoingMessage);
         }
     }

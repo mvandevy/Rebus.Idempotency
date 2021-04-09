@@ -50,7 +50,7 @@ namespace Rebus.Idempotency.MySql
                         {
                             if (!await reader.ReadAsync()) return null;
 
-                            var msgId = ((Guid) reader.ExtractValue("message_id")).ToString();
+                            var msgId = (string) reader.ExtractValue("message_id");
                             var inputQueueAddress = (string) reader.ExtractValue("input_queue_address");
                             var processingThreadId = (int?) reader.ExtractValue("processing_thread_id");
                             var timeThreadIdAssigned = (DateTime?) reader.ExtractValue("time_thread_id_assigned");
