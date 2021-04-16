@@ -18,12 +18,12 @@ namespace Rebus.Idempotency
         /// Finds an already-existing instance of the given idempotency data based on the <paramref name="messageId"/>.
         /// Returns null if no such instance could be found.
         /// </summary>
-        Task<MessageData> Find(string messageId);
+        Task<MessageData> Find(MessageId messageId);
 
         /// <summary>
-        /// Verifies whether no one else is currenlty processing the message
+        /// Verifies whether no one else is currently processing the message
         /// </summary>
-        Task<bool> IsProcessing(string messageId);
+        Task<bool> IsProcessing(MessageId messageId);
 
         /// <summary>
         /// Cleans the message store of item older than the specified parameter

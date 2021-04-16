@@ -20,16 +20,14 @@ namespace Rebus.Idempotency.MySql
         public MySqlMessageStorage(MySqlConnectionHelper connectionHelper, string dataTableName,
             IRebusLoggerFactory rebusLoggerFactory)
         {
-            if (connectionHelper == null) throw new ArgumentNullException(nameof(connectionHelper));
-            if (dataTableName == null) throw new ArgumentNullException(nameof(dataTableName));
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
-            _connectionHelper = connectionHelper;
-            _dataTableName = dataTableName;
+            _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
+            _dataTableName = dataTableName ?? throw new ArgumentNullException(nameof(dataTableName));
             _log = rebusLoggerFactory.GetLogger<MySqlMessageStorage>();
             _serializer = new IdempotencyDataSerializer();
         }
 
-        public async Task<MessageData> Find(string messageId)
+        public async Task<MessageData> Find(MessageId messageId)
         {
             using (var connection = await _connectionHelper.GetConnection())
             {
@@ -38,11 +36,12 @@ namespace Rebus.Idempotency.MySql
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText = $@"
-                        SELECT s.`message_id`, s.`input_queue_address`, s.`processing_thread_id`, s.`time_thread_id_assigned`, `data`
+                        SELECT s.`message_id`, s.`defer_count`, s.`input_queue_address`, s.`processing_thread_id`, s.`time_thread_id_assigned`, `data`
                             FROM `{_dataTableName}` s
-                            WHERE s.`message_id` = @message_id
+                            WHERE s.`message_id` = @message_id and s.`defer_count`= @defer_count
                         ";
-                    command.Parameters.Add(command.CreateParameter("message_id", DbType.String, messageId));
+                    command.Parameters.Add(command.CreateParameter("message_id", DbType.String, messageId.OriginalMessageId));
+                    command.Parameters.Add(command.CreateParameter("defer_count", DbType.Int32, messageId.DeferCount));
 
                     try
                     {
@@ -50,14 +49,15 @@ namespace Rebus.Idempotency.MySql
                         {
                             if (!await reader.ReadAsync()) return null;
 
-                            var msgId = (string) reader.ExtractValue("message_id");
+                            var msgId = ((Guid) reader.ExtractValue("message_id")).ToString();
+                            var deferCount = (int?) reader.ExtractValue("defer_count");
                             var inputQueueAddress = (string) reader.ExtractValue("input_queue_address");
                             var processingThreadId = (int?) reader.ExtractValue("processing_thread_id");
                             var timeThreadIdAssigned = (DateTime?) reader.ExtractValue("time_thread_id_assigned");
                             var idempotencyData = _serializer.DeserializeData((string) (reader.ExtractValue("data")));
 
-                            msgData = MessageDataFactory.BuildMessageData(msgId, inputQueueAddress, processingThreadId,
-                                timeThreadIdAssigned);
+                            msgData = MessageDataFactory.BuildMessageData(msgId, deferCount, inputQueueAddress, 
+                                processingThreadId, timeThreadIdAssigned);
                             msgData.IdempotencyData = idempotencyData;
                         }
                     }
@@ -76,7 +76,7 @@ namespace Rebus.Idempotency.MySql
             }
         }
 
-        public async Task<bool> IsProcessing(string messageId)
+        public async Task<bool> IsProcessing(MessageId messageId)
         {
             using (var connection = await _connectionHelper.GetConnection())
             {
@@ -85,15 +85,16 @@ namespace Rebus.Idempotency.MySql
                     command.CommandText = $@"
                         SELECT s.`processing_thread_id`
                             FROM `{_dataTableName}` s
-                            WHERE s.`message_id` = @message_id
+                            WHERE s.`message_id` = @message_id and s.`defer_count` = @defer_count
                         ";
-                    command.Parameters.Add(command.CreateParameter("message_id", DbType.String, messageId));
+                    command.Parameters.Add(command.CreateParameter("message_id", DbType.String, messageId.OriginalMessageId));
+                    command.Parameters.Add(command.CreateParameter("defer_count", DbType.Int32, messageId.DeferCount));
 
                     try
                     {
                         var processingThreadId = await command.ExecuteScalarAsync();
                         if (processingThreadId is DBNull) return false;
-                        return (processingThreadId != null);
+                        return processingThreadId != null;
                     }
                     catch (SqlException sqlException) when (sqlException.Number == OperationCancelledNumber)
                     {
@@ -122,17 +123,19 @@ namespace Rebus.Idempotency.MySql
                 {
                     command.CommandText = $@"
 
-                        INSERT INTO {_dataTableName} (`message_id`, `input_queue_address`, `processing_thread_id`, `time_thread_id_assigned`, `data`)
-                        VALUES (@message_id, @input_queue_address, @processing_thread_id, @time_thread_id_assigned, @data)
+                        INSERT INTO {_dataTableName} (`message_id`, `defer_count`, `input_queue_address`, `processing_thread_id`, `time_thread_id_assigned`, `data`)
+                        VALUES (@message_id, @defer_count, @input_queue_address, @processing_thread_id, @time_thread_id_assigned, @data)
                         ON DUPLICATE KEY UPDATE 
                             `message_id` = @message_id, 
+                            `defer_count` = @defer_count, 
                             `input_queue_address` = @input_queue_address, 
                             `processing_thread_id` = @processing_thread_id, 
                             `time_thread_id_assigned` = @time_thread_id_assigned,
                             `data` = @data;
 
                         ";
-                    command.Parameters.Add(command.CreateParameter("message_id", DbType.String, messageData.MessageId));
+                    command.Parameters.Add(command.CreateParameter("message_id", DbType.String, messageData.MessageId.OriginalMessageId));
+                    command.Parameters.Add(command.CreateParameter("defer_count", DbType.Int32, messageData.MessageId.DeferCount));
                     command.Parameters.Add(command.CreateParameter("input_queue_address", DbType.String,
                         messageData.InputQueueAddress));
                     command.Parameters.Add(command.CreateParameter("processing_thread_id", DbType.Int32,
@@ -169,11 +172,12 @@ namespace Rebus.Idempotency.MySql
                         $@"
                             CREATE TABLE `{_dataTableName}` (
                                 `message_id` CHAR(36) NOT NULL,
+                                `defer_count` INT DEFAULT 0,
                                 `input_queue_address` VARCHAR(200) CHARACTER SET UTF8 NOT NULL,
                                 `processing_thread_id` INT NULL,
                                 `time_thread_id_assigned` TIMESTAMP NULL,
                                 `data` MEDIUMTEXT NULL,
-                                PRIMARY KEY (`message_id`)
+                                PRIMARY KEY (`message_id`, `defer_count`)
                             );";
 
                     command.ExecuteNonQuery();

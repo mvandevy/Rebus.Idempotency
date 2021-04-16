@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using Newtonsoft.Json;
 using Rebus.Messages;
 using Rebus.Pipeline.Send;
 
@@ -8,7 +7,7 @@ namespace Rebus.Idempotency
 {
     public class MessageData
     {
-        public string MessageId { get; set; }
+        public MessageId MessageId { get; set; }
         public string InputQueueAddress { get; set; }
         public int? ProcessingThreadId { get; set; }
         public DateTime? TimeThreadIdAssigned { get; set; }
@@ -23,7 +22,7 @@ namespace Rebus.Idempotency
 
         public bool HasAlreadyHandled(string messageId)
         {
-            var isAlreadyHandled = IdempotencyData.HasAlreadyHandled(messageId);           
+            var isAlreadyHandled = IdempotencyData.HasAlreadyHandled(messageId);
             return isAlreadyHandled;
         }
 
@@ -44,12 +43,12 @@ namespace Rebus.Idempotency
 
         public void MarkMessageAsDuplicate()
         {
-            this.IsDuplicate = true;
+            IsDuplicate = true;
         }
 
         public bool CanBeSaved()
         {
-            return !this.IsDuplicate;
+            return !IsDuplicate;
         }
     }
 }
