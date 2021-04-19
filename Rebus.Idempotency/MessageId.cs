@@ -5,6 +5,11 @@ namespace Rebus.Idempotency
         public string OriginalMessageId;
         public int DeferCount = 0;
 
+        public MessageId(string messageId)
+        {
+            OriginalMessageId = messageId;
+        }
+
         public MessageId(string messageId, int? deferCount)
         {
             OriginalMessageId = messageId;
@@ -47,7 +52,7 @@ namespace Rebus.Idempotency
 
         public override string ToString()
         {
-            return $"{OriginalMessageId}#{DeferCount}";
+            return $"{OriginalMessageId}" + (DeferCount > 0 ? $"#{DeferCount}" : "");
         }
     }
 }
