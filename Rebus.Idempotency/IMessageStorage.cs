@@ -30,5 +30,11 @@ namespace Rebus.Idempotency
         /// </summary>
         /// <returns></returns>
         Task Cleanup(TimeSpan olderThan);
+
+        /// <summary>
+        /// Verifies the current message store
+        /// </summary>
+        /// <returns>Throws error when something is not right</returns>
+        Task Verify();
     }
 }

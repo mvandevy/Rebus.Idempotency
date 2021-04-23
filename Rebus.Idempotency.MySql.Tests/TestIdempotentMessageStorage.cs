@@ -125,5 +125,11 @@ namespace Rebus.Idempotency.MySql.Tests
             // Assert
             Assert.False(isProcessing);
         }
+
+        [Fact]
+        public async Task TestVerify()
+        {
+            await _messageStorage.Verify();
+        }
     }
 }

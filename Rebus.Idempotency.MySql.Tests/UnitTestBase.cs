@@ -22,8 +22,7 @@ namespace Rebus.Idempotency.MySql.Tests
 
         protected void CleanUpDisposables()
         {
-            IDisposable result;
-            while (_disposables.TryPop(out result))
+            while (_disposables.TryPop(out IDisposable result))
             {
                 Console.WriteLine(string.Format("Disposing {0}", result));
                 result.Dispose();

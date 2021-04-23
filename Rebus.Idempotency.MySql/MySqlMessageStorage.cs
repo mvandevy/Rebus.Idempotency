@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Rebus.Extensions;
 using Rebus.Logging;
 using Rebus.Idempotency.MySql.Extensions;
+using System.Collections.Generic;
 
 namespace Rebus.Idempotency.MySql
 {
@@ -49,14 +50,14 @@ namespace Rebus.Idempotency.MySql
                         {
                             if (!await reader.ReadAsync()) return null;
 
-                            var msgId = ((Guid) reader.ExtractValue("message_id")).ToString();
-                            var deferCount = (int?) reader.ExtractValue("defer_count");
-                            var inputQueueAddress = (string) reader.ExtractValue("input_queue_address");
-                            var processingThreadId = (int?) reader.ExtractValue("processing_thread_id");
-                            var timeThreadIdAssigned = (DateTime?) reader.ExtractValue("time_thread_id_assigned");
-                            var idempotencyData = _serializer.DeserializeData((string) (reader.ExtractValue("data")));
+                            var msgId = ((Guid)reader.ExtractValue("message_id")).ToString();
+                            var deferCount = (int?)reader.ExtractValue("defer_count");
+                            var inputQueueAddress = (string)reader.ExtractValue("input_queue_address");
+                            var processingThreadId = (int?)reader.ExtractValue("processing_thread_id");
+                            var timeThreadIdAssigned = (DateTime?)reader.ExtractValue("time_thread_id_assigned");
+                            var idempotencyData = _serializer.DeserializeData((string)(reader.ExtractValue("data")));
 
-                            msgData = MessageDataFactory.BuildMessageData(msgId, deferCount, inputQueueAddress, 
+                            msgData = MessageDataFactory.BuildMessageData(msgId, deferCount, inputQueueAddress,
                                 processingThreadId, timeThreadIdAssigned);
                             msgData.IdempotencyData = idempotencyData;
                         }
@@ -151,6 +152,48 @@ namespace Rebus.Idempotency.MySql
             }
         }
 
+        public async Task Verify()
+        {
+            using (var connection = await _connectionHelper.GetConnection())
+            {
+                var tableNames = new List<string>();
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = "select * from information_schema.tables where table_name = @table_name";
+                    command.Parameters.Add(command.CreateParameter("table_name", DbType.String, _dataTableName));
+                    
+                    var result = await command.ExecuteScalarAsync();
+                    if(result is DBNull || result == null)
+                        throw new Exception($"Table {_dataTableName} does not exist!");
+                }
+
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText =
+                        $@"
+                            SELECT COLUMN_NAME
+                            FROM INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_NAME = @table_name
+                        ;";
+
+                    command.Parameters.Add(command.CreateParameter("table_name", DbType.String, _dataTableName));
+
+                    var columns = new List<string>();
+                    var reader = await command.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                    {
+                        columns.Add(reader[0].ToString().ToLowerInvariant());
+                    }
+
+                    if(!columns.Contains("defer_count"))
+                    {
+                        throw new Exception("The defer_count column is required for this package version. Please " +
+                            $"update the database schema for your idempotency table: {_dataTableName}.");
+                    }
+                }
+            }
+        }
+
         public async Task EnsureTablesAreCreated()
         {
             using (var connection = await _connectionHelper.GetConnection())
@@ -172,7 +215,7 @@ namespace Rebus.Idempotency.MySql
                         $@"
                             CREATE TABLE `{_dataTableName}` (
                                 `message_id` CHAR(36) NOT NULL,
-                                `defer_count` INT DEFAULT 0,
+                                `defer_count` INT NOT NULL DEFAULT 0,
                                 `input_queue_address` VARCHAR(200) CHARACTER SET UTF8 NOT NULL,
                                 `processing_thread_id` INT NULL,
                                 `time_thread_id_assigned` TIMESTAMP NULL,
@@ -223,6 +266,6 @@ namespace Rebus.Idempotency.MySql
             }
         }
 
-        
+
     }
 }

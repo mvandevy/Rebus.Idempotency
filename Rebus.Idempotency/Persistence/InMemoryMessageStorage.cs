@@ -77,5 +77,10 @@ namespace Rebus.Idempotency.Persistence
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
         {
         }
+
+        public Task Verify()
+        {
+            return Task.CompletedTask;            
+        }
     }
 }

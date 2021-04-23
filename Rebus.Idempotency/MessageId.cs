@@ -1,18 +1,15 @@
+using System;
+
 namespace Rebus.Idempotency
 {
     public class MessageId
     {
-        public string OriginalMessageId;
+        public Guid OriginalMessageId;
         public int DeferCount = 0;
 
-        public MessageId(string messageId)
+        public MessageId(string messageId, int? deferCount = 0)
         {
-            OriginalMessageId = messageId;
-        }
-
-        public MessageId(string messageId, int? deferCount)
-        {
-            OriginalMessageId = messageId;
+            OriginalMessageId = Guid.Parse(messageId);
             DeferCount = deferCount ?? 0;
         }
 
