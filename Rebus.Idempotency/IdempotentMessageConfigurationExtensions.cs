@@ -1,16 +1,8 @@
-﻿using System;
-using System.CodeDom.Compiler;
-using System.Collections.Generic;
-using System.Dynamic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Rebus.Config;
+﻿using Rebus.Config;
 using Rebus.Logging;
 using Rebus.Pipeline;
 using Rebus.Pipeline.Receive;
 using Rebus.Pipeline.Send;
-using Rebus.Sagas.Idempotent;
 using Rebus.Transport;
 
 namespace Rebus.Idempotency
@@ -18,7 +10,8 @@ namespace Rebus.Idempotency
     public static class IdempotentMessageConfigurationExtensions
     {
         public static void EnableIdempotentMessages(this OptionsConfigurer configurer, IMessageStorage messageStorage) 
-        {
+        {   
+            messageStorage.Verify().Wait();
             configurer.Decorate<IPipeline>(c =>
             {
                 var transport = c.Get<ITransport>();
@@ -26,7 +19,7 @@ namespace Rebus.Idempotency
                 var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
 
                 var incomingStep = new IdempotentMessageIncomingStep(transport, messageStorage, rebusLoggerFactory);
-                var loadMessageDataStep = new LoadMessageDataStep(messageStorage, transport, rebusLoggerFactory);
+                var loadMessageDataStep = new LoadMessageDataStep(messageStorage, rebusLoggerFactory);
 
                 var outgoingStep = new IdempotentMessageOutgoingStep(rebusLoggerFactory);
 

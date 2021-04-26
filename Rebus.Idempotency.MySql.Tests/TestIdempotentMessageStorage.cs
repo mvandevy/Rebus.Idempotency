@@ -57,9 +57,9 @@ namespace Rebus.Idempotency.MySql.Tests
             var idempotencyData = new IdempotencyData();
             idempotencyData.MarkMessageAsHandled(Guid.NewGuid().ToString());
             idempotencyData.AddOutgoingMessage(
-                Guid.NewGuid().ToString(), 
-                new []{ "test_destination" }, 
-                new TransportMessage(new Dictionary<string, string>(), Encoding.ASCII.GetBytes("test_body")));
+                Guid.NewGuid().ToString(),
+                new[] { "test_destination" },
+                new TransportMessage(new Dictionary<string, string>() { { "rbs2-msg-id", msgId.ToString() } }, Encoding.ASCII.GetBytes("test_body")));
 
             var msgData = new MessageData
             {
@@ -73,7 +73,6 @@ namespace Rebus.Idempotency.MySql.Tests
             // Act
             await _messageStorage.InsertOrUpdate(msgData);
             var retrievedMsgData = await _messageStorage.Find(msgId);
-            
 
             // Assert
             Assert.Equal(msgData.MessageId, retrievedMsgData.MessageId);
@@ -125,6 +124,12 @@ namespace Rebus.Idempotency.MySql.Tests
 
             // Assert
             Assert.False(isProcessing);
+        }
+
+        [Fact]
+        public async Task TestVerify()
+        {
+            await _messageStorage.Verify();
         }
     }
 }

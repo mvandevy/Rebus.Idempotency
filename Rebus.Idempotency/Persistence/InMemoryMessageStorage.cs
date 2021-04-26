@@ -16,7 +16,7 @@ namespace Rebus.Idempotency.Persistence
         };
 
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
-        public async Task<MessageData> Find(string messageId)
+        public async Task<MessageData> Find(MessageId messageId)
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
         {
             lock (_lock)
@@ -35,7 +35,7 @@ namespace Rebus.Idempotency.Persistence
         }
 
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
-        public async Task<bool> IsProcessing(string messageId)
+        public async Task<bool> IsProcessing(MessageId messageId)
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
         {
             lock (_lock)
@@ -76,6 +76,11 @@ namespace Rebus.Idempotency.Persistence
         public async Task Cleanup(TimeSpan olderThan)
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
         {
+        }
+
+        public Task Verify()
+        {
+            return Task.CompletedTask;            
         }
     }
 }

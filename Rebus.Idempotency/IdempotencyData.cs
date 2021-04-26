@@ -31,7 +31,7 @@ namespace Rebus.Idempotency
         /// <summary>
         /// Gets whether the message with the given ID has already been handled
         /// </summary>
-        public bool HasAlreadyHandled(string messageId)
+        public bool HasAlreadyHandled(MessageId messageId)
         {
             return _handledMessageIds.Contains(messageId);
         }
@@ -39,7 +39,7 @@ namespace Rebus.Idempotency
         /// <summary>
         /// Gets the outgoing messages for the incoming message with the given ID
         /// </summary>
-        public IEnumerable<OutgoingMessage> GetOutgoingMessages(string messageId)
+        public IEnumerable<OutgoingMessage> GetOutgoingMessages(MessageId messageId)
         {
             var outgoingMessages = _outgoingMessages.FirstOrDefault(o => o.MessageId == messageId);
 
@@ -51,7 +51,7 @@ namespace Rebus.Idempotency
         /// <summary>
         /// Marks the message with the given ID as handled
         /// </summary>
-        public void MarkMessageAsHandled(string messageId)
+        public void MarkMessageAsHandled(MessageId messageId)
         {
             _handledMessageIds.Add(messageId);
         }
@@ -60,14 +60,14 @@ namespace Rebus.Idempotency
         /// Adds the <see cref="TransportMessage"/> as an outgoing message destined for the addresses specified by <paramref name="destinationAddresses"/>
         /// under the given <paramref name="messageId"/>
         /// </summary>
-        public void AddOutgoingMessage(string messageId, IEnumerable<string> destinationAddresses, TransportMessage transportMessage)
+        public void AddOutgoingMessage(MessageId messageId, IEnumerable<string> destinationAddresses, TransportMessage transportMessage)
         {
             var outgoingMessage = new OutgoingMessage(destinationAddresses, transportMessage);
 
             GetOrCreate(messageId).Add(outgoingMessage);
         }
 
-        OutgoingMessages GetOrCreate(string messageId)
+        OutgoingMessages GetOrCreate(MessageId messageId)
         {
             _handledMessageIds.Add(messageId);
 

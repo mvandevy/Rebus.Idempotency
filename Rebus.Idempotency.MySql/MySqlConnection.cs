@@ -19,10 +19,8 @@ namespace Rebus.Idempotency.MySql
         /// </summary>
         public MySqlConnection(MySqlData.MySqlClient.MySqlConnection currentConnection, MySqlData.MySqlClient.MySqlTransaction currentTransaction)
         {
-            if (currentConnection == null) throw new ArgumentNullException(nameof(currentConnection));
-            if (currentTransaction == null) throw new ArgumentNullException(nameof(currentTransaction));
-            _currentConnection = currentConnection;
-            _currentTransaction = currentTransaction;
+            _currentConnection = currentConnection ?? throw new ArgumentNullException(nameof(currentConnection));
+            _currentTransaction = currentTransaction ?? throw new ArgumentNullException(nameof(currentTransaction));
         }
 
         /// <summary>

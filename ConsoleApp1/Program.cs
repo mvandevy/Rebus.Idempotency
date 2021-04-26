@@ -9,6 +9,7 @@ using Rebus.Handlers;
 using Rebus.Idempotency;
 using Rebus.Idempotency.Persistence;
 using Rebus.Messages;
+using Rebus.Persistence.InMem;
 using Rebus.Transport.InMem;
 
 namespace ConsoleApp1
@@ -22,6 +23,12 @@ namespace ConsoleApp1
 
             _activator = new BuiltinHandlerActivator();
 
+            var handlersTriggered = new ConcurrentQueue<DateTime>();
+            var receivedMessages = new ConcurrentQueue<OutgoingMessage>();
+
+            _activator.Register((b, context) => new MyMessageHandler(b, handlersTriggered));
+            _activator.Register(() => new OutgoingMessageCollector(receivedMessages));
+
             _bus = Configure.With(_activator)
                 .Logging(l => l.ColoredConsole())
                 .Transport(t =>
@@ -33,13 +40,8 @@ namespace ConsoleApp1
                     o.EnableIdempotentMessages(new InMemoryMessageStorage());
                     o.LogPipeline(true);
                 })
+                .Timeouts(t => t.StoreInMemory() )
                 .Start();
-
-            var handlersTriggered = new ConcurrentQueue<DateTime>();
-            var receivedMessages = new ConcurrentQueue<OutgoingMessage>();
-
-            _activator.Register((b, context) => new MyMessageHandler(b, handlersTriggered));
-            _activator.Register(() => new OutgoingMessageCollector(receivedMessages));
 
             int total = 10;
             var messagesToSend = new List<MyMessage>(total);
@@ -51,7 +53,7 @@ namespace ConsoleApp1
                     Total = total,
                     SendOutgoingMessage = true
                 };
-                messagesToSend.Add(msg);   
+                messagesToSend.Add(msg);
             }
 
             var headers = ConstructHeadersWithMessageId();
@@ -59,6 +61,7 @@ namespace ConsoleApp1
             foreach (var message in messagesToSend)
             {
                 _bus.SendLocal(message, headers);
+                _bus.DeferLocal(TimeSpan.FromSeconds(10), message, headers);
                 Task.Delay(100);
             }
 
@@ -74,8 +77,10 @@ namespace ConsoleApp1
 
         private static Dictionary<string, string> ConstructHeadersWithMessageId()
         {
-            var headers = new Dictionary<string, string>();
-            headers.Add(Headers.MessageId, Guid.NewGuid().ToString());
+            var headers = new Dictionary<string, string>
+            {
+                { Headers.MessageId, Guid.NewGuid().ToString() }
+            };
             return headers;
         }
     }

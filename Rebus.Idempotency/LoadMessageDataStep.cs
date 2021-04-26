@@ -17,11 +17,10 @@ namespace Rebus.Idempotency
         /// <summary>
         /// Constructs the step with the given saga storage
         /// </summary>
-        public LoadMessageDataStep(IMessageStorage messageStorage, ITransport transport, IRebusLoggerFactory rebusLoggerFactory)
+        public LoadMessageDataStep(IMessageStorage messageStorage, IRebusLoggerFactory rebusLoggerFactory)
         {
-            if (messageStorage == null) throw new ArgumentNullException(nameof(messageStorage));
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
-            _msgStorage = messageStorage;
+            _msgStorage = messageStorage ?? throw new ArgumentNullException(nameof(messageStorage));
             _log = rebusLoggerFactory.GetLogger<LoadMessageDataStep>();
         }
 

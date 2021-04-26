@@ -8,8 +8,10 @@ namespace Rebus.Idempotency.Tests
     {
         public static Dictionary<string, string> ConstructHeadersWithMessageId()
         {
-            var headers = new Dictionary<string, string>();
-            headers.Add(Headers.MessageId, Guid.NewGuid().ToString());
+            var headers = new Dictionary<string, string>
+            {
+                { Headers.MessageId, Guid.NewGuid().ToString() }
+            };
             return headers;
         }
     }
