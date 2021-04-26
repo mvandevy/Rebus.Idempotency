@@ -84,6 +84,45 @@ namespace Rebus.Idempotency.MySql.Tests
         }
 
         [Fact]
+        public async Task TestFullBlownStoreAndRetrieveDeferredMessage()
+        {
+            // Arrange
+            var msgId = new MessageId(Guid.NewGuid(), 2);
+
+            var idempotencyData = new IdempotencyData();
+            idempotencyData.MarkMessageAsHandled(Guid.NewGuid().ToString());
+            idempotencyData.AddOutgoingMessage(
+                Guid.NewGuid().ToString(),
+                new[] { "test_destination" },
+                new TransportMessage(new Dictionary<string, string>() { 
+                    { "rbs2-msg-id", msgId.OriginalMessageId.ToString() },
+                    { "rbs2-defer-count", msgId.DeferCount.ToString() } }, 
+                    Encoding.ASCII.GetBytes("test_body")));
+
+            var msgData = new MessageData
+            {
+                MessageId = msgId,
+                InputQueueAddress = "testQueueName",
+                ProcessingThreadId = 123,
+                TimeThreadIdAssigned = new DateTime(2017, 3, 27, 1, 23, 45),
+                IdempotencyData = idempotencyData
+            };
+
+            // Act
+            await _messageStorage.InsertOrUpdate(msgData);
+            var retrievedMsgData = await _messageStorage.Find(msgId);
+
+            // Assert
+            Assert.Equal(msgData.MessageId.OriginalMessageId, retrievedMsgData.MessageId.OriginalMessageId);
+            Assert.Equal(msgData.MessageId.DeferCount, retrievedMsgData.MessageId.DeferCount);
+            Assert.Equal(msgData.InputQueueAddress, retrievedMsgData.InputQueueAddress);
+            Assert.Equal(msgData.ProcessingThreadId, retrievedMsgData.ProcessingThreadId);
+            Assert.Equal(msgData.TimeThreadIdAssigned, retrievedMsgData.TimeThreadIdAssigned);
+            Assert.Equal(msgData.IdempotencyData.HandledMessageIds, retrievedMsgData.IdempotencyData.HandledMessageIds);
+            Assert.Equal(msgData.IdempotencyData.OutgoingMessages[0].MessageId, retrievedMsgData.IdempotencyData.OutgoingMessages[0].MessageId);
+        }
+
+        [Fact]
         public async Task TestIdempotentMessageIsMarkedAsIsProcessingWhenItHasProcessingThreadId()
         {
             // Arrange

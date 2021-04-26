@@ -7,9 +7,9 @@ namespace Rebus.Idempotency
         public Guid OriginalMessageId;
         public int DeferCount = 0;
 
-        public MessageId(string messageId, int? deferCount = 0)
+        public MessageId(Guid messageId, int? deferCount = 0)
         {
-            OriginalMessageId = Guid.Parse(messageId);
+            OriginalMessageId = messageId;
             DeferCount = deferCount ?? 0;
         }
 
@@ -21,7 +21,7 @@ namespace Rebus.Idempotency
         public static implicit operator MessageId(string value)
         {
             var split = value.Split('#');
-            return new MessageId(split[0], split.Length > 1 ? (int?)int.Parse(split[1]) : null);
+            return new MessageId(Guid.Parse(split[0]), split.Length > 1 ? (int?)int.Parse(split[1]) : null);
         }
 
         private static string GetMessageIdString(MessageId value)

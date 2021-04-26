@@ -10,7 +10,7 @@ namespace Rebus.Idempotency.Tests
         {
             var id = Guid.NewGuid();
 
-            var messageId = new MessageId(id.ToString());
+            var messageId = new MessageId(id);
 
             Assert.Equal(id.ToString(), messageId);
         }
@@ -20,7 +20,7 @@ namespace Rebus.Idempotency.Tests
         {
             var id = Guid.NewGuid();
 
-            var messageId = new MessageId(id.ToString(), 5);
+            var messageId = new MessageId(id, 5);
 
             Assert.Equal($"{id}#5", messageId);
         }
@@ -31,8 +31,8 @@ namespace Rebus.Idempotency.Tests
             var id = Guid.NewGuid();
             var messageId = $"{id}";
 
-            Assert.Equal(messageId, new MessageId(id.ToString()));
-            Assert.Equal(id, Guid.Parse(((MessageId)messageId).OriginalMessageId));
+            Assert.Equal(messageId, new MessageId(id));
+            Assert.Equal(id, ((MessageId)messageId).OriginalMessageId);
             Assert.Equal(0, ((MessageId)messageId).DeferCount);
         }
 
@@ -42,8 +42,8 @@ namespace Rebus.Idempotency.Tests
             var id = Guid.NewGuid();
             var messageId = $"{id}#5";
 
-            Assert.Equal(messageId, new MessageId(id.ToString(), 5));
-            Assert.Equal(id.ToString(), ((MessageId)messageId).OriginalMessageId);
+            Assert.Equal(messageId, new MessageId(id, 5));
+            Assert.Equal(id, ((MessageId)messageId).OriginalMessageId);
             Assert.Equal(5, ((MessageId)messageId).DeferCount);
         }
     }

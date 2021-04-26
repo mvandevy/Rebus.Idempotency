@@ -5,7 +5,7 @@ namespace Rebus.Idempotency
     public static class MessageDataFactory
     {
         public static MessageData BuildMessageData(
-            string messageId, 
+            Guid messageId, 
             int? deferCount,
             string inputQueueAddress, 
             int? processingThreadId,
