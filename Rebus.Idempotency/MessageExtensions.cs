@@ -13,7 +13,7 @@ namespace Rebus.Idempotency
                 : 0;
 
             // if the message got defered, it needs a new ID in terms of idempotency.
-            return new MessageId(Guid.Parse(message.GetMessageId()), deferCount);
+            return new MessageId(Guid.Parse(message.GetMessageId()), (byte)deferCount);
         }
 
         public static MessageId GetMessageIdWithDeferCount(this TransportMessage message)
@@ -23,7 +23,7 @@ namespace Rebus.Idempotency
                 : 0;
 
             // if the message got defered, it needs a new ID in terms of idempotency.
-            return new MessageId(Guid.Parse(message.GetMessageId()), deferCount);
+            return new MessageId(Guid.Parse(message.GetMessageId()), (byte)deferCount);
         }
     }
 }

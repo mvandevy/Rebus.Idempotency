@@ -6,7 +6,7 @@ namespace Rebus.Idempotency
     {
         public static MessageData BuildMessageData(
             Guid messageId, 
-            int? deferCount,
+            byte? deferCount,
             string inputQueueAddress, 
             int? processingThreadId,
             DateTime? timeThreadIdAssigned)
