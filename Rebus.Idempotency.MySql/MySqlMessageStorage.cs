@@ -42,7 +42,7 @@ namespace Rebus.Idempotency.MySql
                             WHERE s.`message_id` = @message_id and s.`defer_count`= @defer_count
                         ";
                     command.Parameters.Add(command.CreateParameter("message_id", DbType.String, messageId.OriginalMessageId));
-                    command.Parameters.Add(command.CreateParameter("defer_count", DbType.Int32, messageId.DeferCount));
+                    command.Parameters.Add(command.CreateParameter("defer_count", DbType.Byte, messageId.DeferCount));
 
                     try
                     {
@@ -50,8 +50,8 @@ namespace Rebus.Idempotency.MySql
                         {
                             if (!await reader.ReadAsync()) return null;
 
-                            var msgId = ((Guid)reader.ExtractValue("message_id")).ToString();
-                            var deferCount = (int?)reader.ExtractValue("defer_count");
+                            var msgId = (Guid)reader.ExtractValue("message_id");
+                            var deferCount = (byte)reader.ExtractValue("defer_count");
                             var inputQueueAddress = (string)reader.ExtractValue("input_queue_address");
                             var processingThreadId = (int?)reader.ExtractValue("processing_thread_id");
                             var timeThreadIdAssigned = (DateTime?)reader.ExtractValue("time_thread_id_assigned");
@@ -89,7 +89,7 @@ namespace Rebus.Idempotency.MySql
                             WHERE s.`message_id` = @message_id and s.`defer_count` = @defer_count
                         ";
                     command.Parameters.Add(command.CreateParameter("message_id", DbType.String, messageId.OriginalMessageId));
-                    command.Parameters.Add(command.CreateParameter("defer_count", DbType.Int32, messageId.DeferCount));
+                    command.Parameters.Add(command.CreateParameter("defer_count", DbType.Byte, messageId.DeferCount));
 
                     try
                     {
@@ -136,7 +136,7 @@ namespace Rebus.Idempotency.MySql
 
                         ";
                     command.Parameters.Add(command.CreateParameter("message_id", DbType.String, messageData.MessageId.OriginalMessageId));
-                    command.Parameters.Add(command.CreateParameter("defer_count", DbType.Int32, messageData.MessageId.DeferCount));
+                    command.Parameters.Add(command.CreateParameter("defer_count", DbType.Byte, messageData.MessageId.DeferCount));
                     command.Parameters.Add(command.CreateParameter("input_queue_address", DbType.String,
                         messageData.InputQueueAddress));
                     command.Parameters.Add(command.CreateParameter("processing_thread_id", DbType.Int32,
@@ -171,24 +171,24 @@ namespace Rebus.Idempotency.MySql
                 {
                     command.CommandText =
                         $@"
-                            SELECT COLUMN_NAME
+                            SELECT COLUMN_NAME, DATA_TYPE
                             FROM INFORMATION_SCHEMA.COLUMNS
                             WHERE TABLE_NAME = @table_name
                         ;";
 
                     command.Parameters.Add(command.CreateParameter("table_name", DbType.String, _dataTableName));
 
-                    var columns = new List<string>();
+                    var columns = new List<(string columnName,string dataType)>();
                     var reader = await command.ExecuteReaderAsync();
                     while (await reader.ReadAsync())
                     {
-                        columns.Add(reader[0].ToString().ToLowerInvariant());
+                        columns.Add((reader[0].ToString().ToLowerInvariant(), reader[1].ToString().ToLowerInvariant()));
                     }
 
-                    if(!columns.Contains("defer_count"))
+                    if(!columns.Exists(x => x.columnName == "defer_count" && x.dataType == "tinyint")) 
                     {
-                        throw new Exception("The defer_count column is required for this package version. Please " +
-                            $"update the database schema for your idempotency table: {_dataTableName}.");
+                        throw new Exception("The defer_count column is required to be tinyint for this package version. " +
+                            $"Please update the database schema for your idempotency table: {_dataTableName}.");
                     }
                 }
             }
@@ -215,7 +215,7 @@ namespace Rebus.Idempotency.MySql
                         $@"
                             CREATE TABLE `{_dataTableName}` (
                                 `message_id` CHAR(36) NOT NULL,
-                                `defer_count` INT NOT NULL DEFAULT 0,
+                                `defer_count` TINYINT(3) UNSIGNED NOT NULL DEFAULT 0,
                                 `input_queue_address` VARCHAR(200) CHARACTER SET UTF8 NOT NULL,
                                 `processing_thread_id` INT NULL,
                                 `time_thread_id_assigned` TIMESTAMP NULL,
