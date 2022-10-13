@@ -156,12 +156,11 @@ namespace Rebus.Idempotency.MySql
         {
             using (var connection = await _connectionHelper.GetConnection())
             {
-                var tableNames = new List<string>();
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText = "select * from information_schema.tables where table_name = @table_name";
                     command.Parameters.Add(command.CreateParameter("table_name", DbType.String, _dataTableName));
-                    
+
                     var result = await command.ExecuteScalarAsync();
                     if(result is DBNull || result == null)
                         throw new Exception($"Table {_dataTableName} does not exist!");
@@ -179,10 +178,12 @@ namespace Rebus.Idempotency.MySql
                     command.Parameters.Add(command.CreateParameter("table_name", DbType.String, _dataTableName));
 
                     var columns = new List<(string columnName,string dataType)>();
-                    var reader = await command.ExecuteReaderAsync();
-                    while (await reader.ReadAsync())
+                    using (var reader = await command.ExecuteReaderAsync())
                     {
-                        columns.Add((reader[0].ToString().ToLowerInvariant(), reader[1].ToString().ToLowerInvariant()));
+                        while (await reader.ReadAsync())
+                        {
+                            columns.Add((reader[0].ToString().ToLowerInvariant(), reader[1].ToString().ToLowerInvariant()));
+                        }
                     }
 
                     if(!columns.Exists(x => x.columnName == "defer_count" && x.dataType == "tinyint")) 
