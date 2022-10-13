@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using Rebus.Time;
 
 namespace Rebus.Idempotency.MySql.Tests
 {
@@ -10,7 +9,6 @@ namespace Rebus.Idempotency.MySql.Tests
 
         public UnitTestBase()
         {
-            RebusTimeMachine.Reset();
             _disposables.Clear();
         }
 
